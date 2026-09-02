@@ -1,25 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { Trophy, Users, Plus, Check, RefreshCw, Play } from 'lucide-react';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { useState } from 'react';
 
 export default function Home() {
-  const [tournamentName, setTournamentName] = useState('PD-Kan Padel Match');
-  const [courtsCount, setCourtsCount] = useState(2);
+  const [tournamentName, setTournamentName] = useState('PD-KAN PADEL MATCH');
   const [targetPoints, setTargetPoints] = useState(21);
   const [players, setPlayers] = useState<string[]>([]);
   const [newPlayerName, setNewPlayerName] = useState('');
-  
   const [activeRound, setActiveRound] = useState(1);
   const [matches, setMatches] = useState<any[]>([]);
-  const [scores, setScores] = useState<{ [key: string]: { scoreA: number; scoreB: number } }>({});
 
-  // 1. Tambah Pemain ke Roster
+  // 1. Tambah Pemain
   const handleAddPlayer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlayerName.trim()) return;
@@ -27,18 +18,22 @@ export default function Home() {
     setNewPlayerName('');
   };
 
-  // 2. Generator Match Format Americano (Rotasi Murni Seimbang)
-  const generateAmericanoMatches = () => {
+  // 2. Padam Pemain
+  const handleRemovePlayer = (index: number) => {
+    setPlayers(players.filter((_, i) => i !== index));
+  };
+
+  // 3. Generate Perlawanan Americano
+  const generateMatches = () => {
     if (players.length < 4) {
-      alert('Minimal 4 pemain diperlukan untuk membuat match!');
+      alert('Sila tambah sekurang-kurangnya 4 orang pemain!');
       return;
     }
 
-    const n = Math.min(players.length, courtsCount * 4);
-    const activePool = players.slice(0, n);
-    const rotated = [...activePool];
+    const n = Math.min(players.length, 8); // Maksimum 2 gelanggang (8 pemain)
+    const pool = players.slice(0, n);
+    const rotated = [...pool];
 
-    // Rotasi posisi berdasarkan nomor ronde
     const offset = (activeRound - 1) % (n - 1);
     if (offset > 0) {
       const fixed = rotated[0];
@@ -51,52 +46,40 @@ export default function Home() {
     }
 
     const newMatches = [];
-    const matchesPerRound = Math.floor(n / 4);
+    const matchesCount = Math.floor(n / 4);
 
-    for (let m = 0; m < matchesPerRound; m++) {
-      const p1 = rotated[m];
-      const p2 = rotated[n - 1 - m];
-      const p3 = rotated[m + 1];
-      const p4 = rotated[n - 2 - m];
-
-      const matchId = `match-${activeRound}-${m + 1}`;
+    for (let m = 0; m < matchesCount; m++) {
       newMatches.push({
-        id: matchId,
+        id: `match-${activeRound}-${m + 1}`,
         court: m + 1,
-        teamA: [p1, p2],
-        teamB: [p3, p4],
-        scoreA: scores[matchId]?.scoreA || 0,
-        scoreB: scores[matchId]?.scoreB || 0,
+        teamA: [rotated[m], rotated[n - 1 - m]],
+        teamB: [rotated[m + 1], rotated[n - 2 - m]],
+        scoreA: 0,
+        scoreB: 0,
       });
     }
 
     setMatches(newMatches);
   };
 
-  // 3. Simpan Skor
-  const handleScoreChange = (matchId: string, scoreA: number, scoreB: number) => {
-    const validA = Math.max(0, Math.min(targetPoints, scoreA));
-    const validB = targetPoints - validA; // Auto calculate sisa poin
+  // 4. Kemaskini Skor
+  const handleScoreChange = (matchId: string, valA: number) => {
+    const scoreA = Math.max(0, Math.min(targetPoints, valA));
+    const scoreB = targetPoints - scoreA;
 
-    setScores((prev) => ({
-      ...prev,
-      [matchId]: { scoreA: validA, scoreB: validB },
-    }));
-
-    setMatches((prev) =>
-      prev.map((m) => (m.id === matchId ? { ...m, scoreA: validA, scoreB: validB } : m))
+    setMatches(
+      matches.map((m) =>
+        m.id === matchId ? { ...m, scoreA, scoreB } : m
+      )
     );
   };
 
-  // 4. Kalkulasi Live Leaderboard
+  // 5. Kedudukan (Standings)
   const calculateStandings = () => {
     const stats: { [key: string]: { name: string; points: number; games: number } } = {};
+    players.forEach((p) => (stats[p] = { name: p, points: 0, games: 0 }));
 
-    players.forEach((p) => {
-      stats[p] = { name: p, points: 0, games: 0 };
-    });
-
-    Object.values(matches).forEach((m) => {
+    matches.forEach((m) => {
       if (m.scoreA > 0 || m.scoreB > 0) {
         m.teamA.forEach((p: string) => {
           if (stats[p]) {
@@ -119,132 +102,336 @@ export default function Home() {
   const standings = calculateStandings();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 p-4 md:p-8 font-sans">
-      <header className="max-w-4xl mx-auto mb-6 flex justify-between items-center border-b border-slate-800 pb-4">
+    <div style={styles.container}>
+      {/* HEADER */}
+      <header style={styles.header}>
         <div>
-          <h1 className="text-2xl font-black text-emerald-400 tracking-tight">{tournamentName}</h1>
-          <p className="text-xs text-slate-400">Americano Padel Match Engine</p>
+          <h1 style={styles.title}>🎾 {tournamentName}</h1>
+          <p style={styles.subtitle}>Engine Perlawanan Padel Americano</p>
         </div>
-        <div className="text-right">
-          <span className="bg-emerald-950 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full border border-emerald-800">
-            {targetPoints} Points / Game
-          </span>
-        </div>
+        <div style={styles.badge}>{targetPoints} Mata / Perlawanan</div>
       </header>
 
-      <main className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* PANEL KIRI: Roster Pemain */}
-        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-          <h2 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-            <Users className="w-4 h-4 text-emerald-400" /> Roster Pemain ({players.length})
-          </h2>
-
-          <form onSubmit={handleAddPlayer} className="flex gap-2 mb-4">
+      {/* UTAMA */}
+      <div style={styles.grid}>
+        {/* PANEL KIRI: ROSTER */}
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>👥 Senarai Pemain ({players.length})</h2>
+          
+          <form onSubmit={handleAddPlayer} style={styles.form}>
             <input
               type="text"
               value={newPlayerName}
               onChange={(e) => setNewPlayerName(e.target.value)}
-              placeholder="Nama Pemain"
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+              placeholder="Nama Pemain..."
+              style={styles.input}
             />
-            <button
-              type="submit"
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-2 rounded-xl transition"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            <button type="submit" style={styles.btnPrimary}>+ Tambah</button>
           </form>
 
-          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div style={styles.playerList}>
             {players.length === 0 ? (
-              <p className="text-xs text-slate-500 italic">Belum ada pemain. Tambahkan pemain di atas.</p>
+              <p style={styles.emptyText}>Belum ada pemain. Tambah di atas!</p>
             ) : (
-              players.map((p, idx) => (
-                <div key={idx} className="bg-slate-950 px-3 py-2 rounded-xl text-xs font-medium border border-slate-800/60 flex justify-between">
-                  <span>{p}</span>
-                  <span className="text-slate-500">#P{idx + 1}</span>
+              players.map((p, i) => (
+                <div key={i} style={styles.playerItem}>
+                  <span><strong>#{i + 1}</strong> {p}</span>
+                  <button onClick={() => handleRemovePlayer(i)} style={styles.btnDelete}>✕</button>
                 </div>
               ))
             )}
           </div>
-        </section>
+        </div>
 
-        {/* PANEL TENGAH: Match & Input Skor */}
-        <section className="md:col-span-2 space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-400">Ronde {activeRound}</span>
+        {/* PANEL KANAN: PERLAWANAN & SKOR */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* CONTROL BAR */}
+          <div style={{ ...styles.card, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontSize: '14px', color: '#94a3b8' }}>Ronde Aktif: </span>
+              <strong style={{ fontSize: '18px', color: '#10b981' }}>Ronde {activeRound}</strong>
             </div>
-            <button
-              onClick={generateAmericanoMatches}
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition active:scale-95"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" /> Generate Matches
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => setActiveRound(Math.max(1, activeRound - 1))}
+                style={styles.btnSecondary}
+              >
+                ◀ Ronde Sebelum
+              </button>
+              <button onClick={generateMatches} style={styles.btnAccent}>
+                ▶ Generate Match
+              </button>
+              <button 
+                onClick={() => setActiveRound(activeRound + 1)}
+                style={styles.btnSecondary}
+              >
+                Ronde Seterusnya ▶
+              </button>
+            </div>
           </div>
 
+          {/* LIST MATCH */}
           {matches.length === 0 ? (
-            <div className="bg-slate-900/50 border border-dashed border-slate-800 rounded-2xl p-8 text-center text-slate-500">
-              <RefreshCw className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-xs">Klik "Generate Matches" untuk memunculkan jadwal ronde ini.</p>
+            <div style={{ ...styles.card, textAlign: 'center', padding: '40px', color: '#64748b' }}>
+              Klik <strong>"Generate Match"</strong> untuk mula susun perlawanan.
             </div>
           ) : (
             matches.map((m) => (
-              <div key={m.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-900 px-2.5 py-0.5 rounded-full">
-                    Court {m.court}
-                  </span>
-                  <span className="text-xs text-slate-400">Total: {targetPoints} Pts</span>
+              <div key={m.id} style={styles.matchCard}>
+                <div style={styles.matchHeader}>
+                  <span style={styles.courtBadge}>Gelanggang {m.court}</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Target: {targetPoints} Pts</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  {/* Team A */}
-                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80">
-                    <p className="text-xs font-semibold text-slate-300 truncate">{m.teamA.join(' & ')}</p>
+                <div style={styles.scoreGrid}>
+                  {/* TEAM A */}
+                  <div style={styles.teamBox}>
+                    <div style={styles.teamNames}>{m.teamA.join(' & ')}</div>
                     <input
                       type="number"
                       value={m.scoreA}
-                      onChange={(e) => handleScoreChange(m.id, Number(e.target.value), m.scoreB)}
-                      className="w-full text-center text-3xl font-black text-emerald-400 bg-transparent outline-none mt-1"
+                      onChange={(e) => handleScoreChange(m.id, Number(e.target.value))}
+                      style={styles.scoreInput}
                     />
                   </div>
 
-                  {/* Team B */}
-                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80">
-                    <p className="text-xs font-semibold text-slate-300 truncate">{m.teamB.join(' & ')}</p>
-                    <div className="text-3xl font-black text-slate-400 mt-1">{m.scoreB}</div>
+                  <div style={{ alignSelf: 'center', fontWeight: 'bold', color: '#64748b', fontSize: '20px' }}>VS</div>
+
+                  {/* TEAM B */}
+                  <div style={styles.teamBox}>
+                    <div style={styles.teamNames}>{m.teamB.join(' & ')}</div>
+                    <div style={styles.scoreDisplay}>{m.scoreB}</div>
                   </div>
                 </div>
               </div>
             ))
           )}
 
-          {/* LEADERBOARD */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mt-6">
-            <h2 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" /> Live Standings
-            </h2>
-
-            <div className="space-y-2">
+          {/* CARTA KEDUDUKAN (LEADERBOARD) */}
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>🏆 Live Leaderboard</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {standings.map((p, idx) => (
-                <div key={p.name} className="flex justify-between items-center bg-slate-950 p-3 rounded-xl border border-slate-800/40">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-5 text-center font-bold text-xs ${idx < 3 ? 'text-amber-400' : 'text-slate-500'}`}>
-                      {idx + 1}
+                <div key={p.name} style={styles.rankItem}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ 
+                      fontWeight: 'bold', 
+                      width: '24px', 
+                      color: idx === 0 ? '#f59e0b' : idx === 1 ? '#94a3b8' : idx === 2 ? '#b45309' : '#64748b' 
+                    }}>
+                      #{idx + 1}
                     </span>
-                    <span className="font-semibold text-slate-200 text-xs">{p.name}</span>
+                    <span style={{ fontWeight: '600' }}>{p.name}</span>
                   </div>
-                  <div className="text-right">
-                    <span className="font-black text-emerald-400 text-xs">{p.points} Pts</span>
-                    <span className="text-[10px] text-slate-500 block">{p.games} match played</span>
+                  <div>
+                    <strong style={{ color: '#10b981', fontSize: '16px' }}>{p.points} Pts</strong>
+                    <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '8px' }}>({p.games} perlawanan)</span>
                   </div>
                 </div>
               ))}
             </div>
-          </section>
-        </section>
-      </main>
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 }
+
+// GAYA CSS (STYLING) DEDIKASI
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    minHeight: '100vh',
+    backgroundColor: '#0f172a',
+    color: '#f8fafc',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    padding: '24px',
+  },
+  header: {
+    maxWidth: '1000px',
+    margin: '0 auto 24px auto',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: '1px solid #1e293b',
+    paddingBottom: '16px',
+  },
+  title: {
+    fontSize: '24px',
+    fontWeight: '800',
+    color: '#34d399',
+    margin: 0,
+  },
+  subtitle: {
+    fontSize: '12px',
+    color: '#94a3b8',
+    margin: '4px 0 0 0',
+  },
+  badge: {
+    backgroundColor: '#064e3b',
+    color: '#34d399',
+    padding: '6px 12px',
+    borderRadius: '20px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    border: '1px solid #047857',
+  },
+  grid: {
+    maxWidth: '1000px',
+    margin: '0 auto',
+    display: 'grid',
+    gridTemplateColumns: '1fr 2fr',
+    gap: '20px',
+  },
+  card: {
+    backgroundColor: '#1e293b',
+    borderRadius: '16px',
+    padding: '20px',
+    border: '1px solid #334155',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  cardTitle: {
+    fontSize: '16px',
+    fontWeight: '700',
+    marginBottom: '16px',
+    color: '#f1f5f9',
+  },
+  form: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '16px',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    border: '1px solid #334155',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    color: '#fff',
+    fontSize: '14px',
+    outline: 'none',
+  },
+  btnPrimary: {
+    backgroundColor: '#10b981',
+    color: '#0f172a',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '10px 16px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+  },
+  btnSecondary: {
+    backgroundColor: '#334155',
+    color: '#f8fafc',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '8px 12px',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  btnAccent: {
+    backgroundColor: '#10b981',
+    color: '#0f172a',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '8px 16px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+  },
+  playerList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: '300px',
+    overflowY: 'auto',
+  },
+  playerItem: {
+    backgroundColor: '#0f172a',
+    padding: '10px 12px',
+    borderRadius: '8px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    fontSize: '14px',
+    border: '1px solid #334155',
+  },
+  btnDelete: {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: '#ef4444',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+  },
+  emptyText: {
+    fontSize: '12px',
+    color: '#64748b',
+    fontStyle: 'italic',
+  },
+  matchCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: '16px',
+    padding: '16px',
+    border: '1px solid #334155',
+  },
+  matchHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginBottom: '12px',
+  },
+  courtBadge: {
+    backgroundColor: '#064e3b',
+    color: '#34d399',
+    fontSize: '11px',
+    fontWeight: 'bold',
+    padding: '2px 8px',
+    borderRadius: '6px',
+  },
+  scoreGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr auto 1fr',
+    gap: '12px',
+  },
+  teamBox: {
+    backgroundColor: '#0f172a',
+    padding: '12px',
+    borderRadius: '12px',
+    textAlign: 'center',
+    border: '1px solid #334155',
+  },
+  teamNames: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#cbd5e1',
+    marginBottom: '8px',
+  },
+  scoreInput: {
+    width: '100%',
+    textAlign: 'center',
+    fontSize: '28px',
+    fontWeight: '900',
+    color: '#34d399',
+    backgroundColor: 'transparent',
+    border: 'none',
+    outline: 'none',
+  },
+  scoreDisplay: {
+    fontSize: '28px',
+    fontWeight: '900',
+    color: '#94a3b8',
+    marginTop: '4px',
+  },
+  rankItem: {
+    backgroundColor: '#0f172a',
+    padding: '12px 16px',
+    borderRadius: '10px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    fontSize: '14px',
+    border: '1px solid #1e293b',
+  },
+};
